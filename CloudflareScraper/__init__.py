@@ -10,7 +10,6 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 ''''''
 from requests.sessions import Session
-#from copy import deepcopy
 
 try:
     from urlparse import urlparse
@@ -36,21 +35,23 @@ BUG_REPORT = ("Cloudflare may have changed their technique, or there may be a bu
 class CloudflareScraper(Session):
     def __init__(self, *args, **kwargs):
         super(CloudflareScraper, self).__init__(*args, **kwargs)
-
+        
         if "requests" in self.headers["User-Agent"]:
-            # Spoof Firefox on Linux if no custom User-Agent has been set
-            self.headers["User-Agent"] = random.choice(DEFAULT_USER_AGENTS)
+            # Spoof a desktop browser if no custom User-Agent has been set. 'Connection:keep-alive'
+            # and 'Accept-Decoding:gzip,deflate' headers are already set by the super.
+            self.headers.update(
+                {
+                    'User-Agent': random.choice(DEFAULT_USER_AGENTS),
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache',
+                    'DNT': '1'                    
+                }
+            )
 
-
+            
     def request(self, method, url, *args, **kwargs):
-        self.headers = {
-                'User-Agent': self.headers['User-Agent'],
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate',
-                'Connection': 'close',
-                'Upgrade-Insecure-Requests': '1'}
-
         resp = super(CloudflareScraper, self).request(method, url, *args, **kwargs)
 
         # Check if Cloudflare anti-bot is on
