@@ -35,22 +35,23 @@ BUG_REPORT = ("Cloudflare may have changed their technique, or there may be a bu
 class CloudflareScraper(Session):
     def __init__(self, *args, **kwargs):
         super(CloudflareScraper, self).__init__(*args, **kwargs)
-        
+
         if "requests" in self.headers["User-Agent"]:
             # Spoof a desktop browser if no custom User-Agent has been set. 'Connection:keep-alive'
             # and 'Accept-Decoding:gzip,deflate' headers are already set by the super.
-            self.headers.update(
-                {
+            # The captcha is trigger if :
+            #   - Connection is not equal to close
+            #   - If we use self.headers.update and not self.headers
+            self.headers= {
                     'User-Agent': random.choice(DEFAULT_USER_AGENTS),
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                     'Accept-Language': 'en-US,en;q=0.5',
+                    'Connection': 'close',
                     'Cache-Control': 'no-cache',
                     'Pragma': 'no-cache',
-                    'DNT': '1'                    
+                    'DNT': '1'
                 }
-            )
 
-            
     def request(self, method, url, *args, **kwargs):
         resp = super(CloudflareScraper, self).request(method, url, *args, **kwargs)
 
@@ -63,7 +64,6 @@ class CloudflareScraper(Session):
 
         # Otherwise, no Cloudflare anti-bot detected
         return resp
-
 
     def solve_cf_challenge(self, resp, **original_kwargs):
         body = resp.text
@@ -153,7 +153,6 @@ class CloudflareScraper(Session):
         else:
             return redirect
 
-
     def cf_sample_domain_function(self, func_expression, domain):
         parameter_start_index = func_expression.find('}(') + 2
         # Send the expression with the "+" char and enclosing parenthesis included, as they are
@@ -162,7 +161,6 @@ class CloudflareScraper(Session):
             func_expression[parameter_start_index : func_expression.rfind(')))')]
         )
         return ord(domain[int(sample_index)])
-
 
     def cf_arithmetic_op(self, op, a, b):
         if op == '+':
@@ -175,7 +173,6 @@ class CloudflareScraper(Session):
             return a - b
         else:
             raise Exception('Unknown operation')
-
 
     def cf_parse_expression(self, expression, domain=None):
 
@@ -206,7 +203,6 @@ class CloudflareScraper(Session):
         else:
             return _get_jsfuck_number(expression[2:-1])
 
-
     @classmethod
     def create_scraper(cls, sess=None, **kwargs):
         """
@@ -223,9 +219,7 @@ class CloudflareScraper(Session):
 
         return scraper
 
-
     ## Functions for integrating cloudflare-scrape with other applications and scripts
-
     @classmethod
     def get_tokens(cls, url, user_agent=None, **kwargs):
         scraper = cls.create_scraper()
@@ -264,7 +258,6 @@ class CloudflareScraper(Session):
         """
         tokens, user_agent = cls.get_tokens(url, user_agent=user_agent, **kwargs)
         return "; ".join("=".join(pair) for pair in tokens.items()), user_agent
-
 
 create_scraper = CloudflareScraper.create_scraper
 get_tokens = CloudflareScraper.get_tokens
