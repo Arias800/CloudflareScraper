@@ -16,6 +16,8 @@ try:
 except ImportError:
     from urllib.parse import urlparse
 
+#Debug Mode (enable lots of print())
+DEBUG_MODE = False
 __version__ = "0.0.0"
 
 DEFAULT_USER_AGENTS = [
@@ -35,6 +37,7 @@ BUG_REPORT = ("Cloudflare may have changed their technique, or there may be a bu
 class CloudflareScraper(Session):
     def __init__(self, *args, **kwargs):
         super(CloudflareScraper, self).__init__(*args, **kwargs)
+        self.tries = 0
 
         if "requests" in self.headers["User-Agent"]:
             # Spoof a desktop browser if no custom User-Agent has been set. 'Connection:keep-alive'
@@ -56,16 +59,27 @@ class CloudflareScraper(Session):
         resp = super(CloudflareScraper, self).request(method, url, *args, **kwargs)
 
         # Check if Cloudflare anti-bot is on
-        if ( resp.status_code == 503
-             and resp.headers.get("Server", "").startswith("cloudflare")
-             and b"jschl_answer" in resp.content
-        ):
+        if self.ifCloudflare(resp):
             return self.solve_cf_challenge(resp, **kwargs)
 
         # Otherwise, no Cloudflare anti-bot detected
+        if DEBUG_MODE == True:
+            print(resp.text)
         return resp
 
+    def ifCloudflare(self, resp):
+        if resp.headers.get('Server', '').startswith('cloudflare'):
+            if self.tries >= 3:
+                raise Exception('Failed to solve Cloudflare challenge!')
+            elif b'/cdn-cgi/l/chk_captcha' in resp.content:
+                raise Exception('Protect by Captcha')
+            elif resp.status_code == 503:
+                return True
+        else:
+            return False
+
     def solve_cf_challenge(self, resp, **original_kwargs):
+        self.tries += 1
         body = resp.text
         parsed_url = urlparse(resp.url)
         domain = parsed_url.netloc
@@ -102,6 +116,14 @@ class CloudflareScraper(Session):
             # Remove a function semicolon before splitting on semicolons, else it messes the order.
             lines = builder.replace(' return +(p)}();', '', 1).split(';')
 
+            if DEBUG_MODE == True:
+                print('s : '+params["s"])
+                print('jschl_vc : '+params["jschl_vc"])
+                print('pass : '+params["pass"])
+                print('js_answer : '+str(js_answer))
+                print('html Content : '+body)
+                print('lines : ' +str(lines))
+
             for line in lines:
                 if len(line) and '=' in line:
                     heading, expression = line.split('=', 1)
@@ -119,6 +141,9 @@ class CloudflareScraper(Session):
                 js_answer += len(domain) # Only older variants add the domain length.
 
             params["jschl_answer"] = '%.10f' % js_answer
+
+            if DEBUG_MODE == True:
+                print("jschl_answer : "+params["jschl_answer"])
 
         except Exception as e:
             # Something is wrong with the page.
