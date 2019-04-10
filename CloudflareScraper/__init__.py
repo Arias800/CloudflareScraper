@@ -37,7 +37,7 @@ BUG_REPORT = ("Cloudflare may have changed their technique, or there may be a bu
 class CloudflareScraper(Session):
     def __init__(self, *args, **kwargs):
         super(CloudflareScraper, self).__init__(*args, **kwargs)
-        self.tries = 0
+        self.cf_tries = 0
 
         if "requests" in self.headers["User-Agent"]:
             # Spoof a desktop browser if no custom User-Agent has been set. 'Connection:keep-alive'
@@ -69,7 +69,7 @@ class CloudflareScraper(Session):
 
     def ifCloudflare(self, resp):
         if resp.headers.get('Server', '').startswith('cloudflare'):
-            if self.tries >= 3:
+            if self.cf_tries >= 3:
                 raise Exception('Failed to solve Cloudflare challenge!')
             elif b'/cdn-cgi/l/chk_captcha' in resp.content:
                 raise Exception('Protect by Captcha')
@@ -79,7 +79,7 @@ class CloudflareScraper(Session):
             return False
 
     def solve_cf_challenge(self, resp, **original_kwargs):
-        self.tries += 1
+        self.cf_tries += 1
         body = resp.text
         parsed_url = urlparse(resp.url)
         domain = parsed_url.netloc
@@ -166,17 +166,21 @@ class CloudflareScraper(Session):
         # performing other types of requests even as the first request.
         method = resp.request.method
         cloudflare_kwargs["allow_redirects"] = False
-
+        
+        # One of these '.request()' calls below might trigger another challenge.
         redirect = self.request(method, submit_url, **cloudflare_kwargs)
 
         if 'Location' in redirect.headers:
             redirect_location = urlparse(redirect.headers["Location"])
             if not redirect_location.netloc:
                 redirect_url = "%s://%s%s" % (parsed_url.scheme, domain, redirect_location.path)
-                return self.request(method, redirect_url, **original_kwargs)
-            return self.request(method, redirect.headers["Location"], **original_kwargs)
+                response = self.request(method, redirect_url, **original_kwargs)
+            response = self.request(method, redirect.headers["Location"], **original_kwargs)
         else:
-            return redirect
+            response = redirect        
+        # Reset the repeated-try counter when the answer passes.
+        self.cf_tries = 0
+        return response
 
     def cf_sample_domain_function(self, func_expression, domain):
         parameter_start_index = func_expression.find('}(') + 2
