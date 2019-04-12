@@ -180,7 +180,7 @@ class CloudflareScraper(Session):
                 redirect = 'https://'+domain+redirect.headers["Location"]
             else:
                 redirect = redirect.headers["Location"]
-            print(redirect)
+
             response = self.request(method, redirect, **original_kwargs)
         else:
             response = redirect
