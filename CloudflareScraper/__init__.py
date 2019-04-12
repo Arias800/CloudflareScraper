@@ -127,10 +127,10 @@ class CloudflareScraper(Session):
             for line in lines:
                 if len(line) and '=' in line:
                     heading, expression = line.split('=', 1)
-                    if 'eval(eval(atob' in expression:
+                    if 'eval(eval(' in expression:
                         # Uses the expression in an external <div>.
                         expression_value = self.cf_parse_expression(extra_div_expression)
-                    elif '(function(p' in expression:
+                    elif 'function(p' in expression:
                         # Expression + domain sampling function.
                         expression_value = self.cf_parse_expression(expression, domain)
                     else:
@@ -166,7 +166,7 @@ class CloudflareScraper(Session):
         # performing other types of requests even as the first request.
         method = resp.request.method
         cloudflare_kwargs["allow_redirects"] = False
-        
+
         # One of these '.request()' calls below might trigger another challenge.
         redirect = self.request(method, submit_url, **cloudflare_kwargs)
 
@@ -175,9 +175,15 @@ class CloudflareScraper(Session):
             if not redirect_location.netloc:
                 redirect_url = "%s://%s%s" % (parsed_url.scheme, domain, redirect_location.path)
                 response = self.request(method, redirect_url, **original_kwargs)
-            response = self.request(method, redirect.headers["Location"], **original_kwargs)
+
+            if not redirect.headers["Location"].startswith('http'):
+                redirect = 'https://'+domain+redirect.headers["Location"]
+            else:
+                redirect = redirect.headers["Location"]
+            print(redirect)
+            response = self.request(method, redirect, **original_kwargs)
         else:
-            response = redirect        
+            response = redirect
         # Reset the repeated-try counter when the answer passes.
         self.cf_tries = 0
         return response
