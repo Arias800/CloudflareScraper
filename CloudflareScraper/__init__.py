@@ -33,11 +33,12 @@ DEFAULT_USER_AGENTS = [
 BUG_REPORT = ("Cloudflare may have changed their technique, or there may be a bug in the script.\n\nPlease read " "https://github.com/Anorov/cloudflare-scrape#updates, then file a "
 "bug report at https://github.com/Anorov/cloudflare-scrape/issues.")
 
-
 class CloudflareScraper(Session):
     def __init__(self, *args, **kwargs):
         super(CloudflareScraper, self).__init__(*args, **kwargs)
         self.cf_tries = 0
+        self.isCaptcha = False
+        self.baseUrl = ""
 
         if "requests" in self.headers["User-Agent"]:
             # Spoof a desktop browser if no custom User-Agent has been set. 'Connection:keep-alive'
@@ -56,10 +57,15 @@ class CloudflareScraper(Session):
                 }
 
     def request(self, method, url, *args, **kwargs):
+        #Sometime the https trigge the captcha
         resp = super(CloudflareScraper, self).request(method, url, *args, **kwargs)
 
         # Check if Cloudflare anti-bot is on
         if self.ifCloudflare(resp):
+            #Sometime the https triggers the captcha
+            if self.isCaptcha == True:
+                self.baseUrl = self.baseUrl.replace('https','http')
+                resp = super(CloudflareScraper, self).request(method, self.baseUrl, *args, **kwargs)
             return self.solve_cf_challenge(resp, **kwargs)
 
         # Otherwise, no Cloudflare anti-bot detected
@@ -72,13 +78,21 @@ class CloudflareScraper(Session):
             if self.cf_tries >= 3:
                 raise Exception('Failed to solve Cloudflare challenge!')
             elif b'/cdn-cgi/l/chk_captcha' in resp.content:
-                raise Exception('Protect by Captcha')
+                #Try without https
+                if self.isCaptcha == False:
+                    self.isCaptcha = True
+                    return True
+                else:
+                    raise Exception('Protect by Captcha')
             elif resp.status_code == 503:
                 return True
         else:
             return False
 
     def solve_cf_challenge(self, resp, **original_kwargs):
+        #Memorise the first url
+        if self.baseUrl == "":
+            self.baseUrl = resp.url
         self.cf_tries += 1
         body = resp.text
         parsed_url = urlparse(resp.url)
@@ -184,6 +198,7 @@ class CloudflareScraper(Session):
             response = self.request(method, redirect, **original_kwargs)
         else:
             response = redirect
+
         # Reset the repeated-try counter when the answer passes.
         self.cf_tries = 0
         return response
@@ -284,7 +299,6 @@ class CloudflareScraper(Session):
                 },
                 scraper.headers["User-Agent"]
                )
-
 
     @classmethod
     def get_cookie_string(cls, url, user_agent=None, **kwargs):
