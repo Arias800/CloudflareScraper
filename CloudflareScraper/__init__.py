@@ -61,7 +61,8 @@ class CloudflareScraper(Session):
         if self.ifCloudflare(resp):
             #Sometime the https triggers the captcha
             if self.isCaptcha == True:
-                self.baseUrl = resp.url
+                if self.baseUrl == "":
+                    self.baseUrl = resp.url
                 self.baseUrl = self.baseUrl.replace('https','http')
                 resp = super(CloudflareScraper, self).request(method, self.baseUrl, *args, **kwargs)
             return self.solve_cf_challenge(resp, **kwargs)
@@ -90,6 +91,8 @@ class CloudflareScraper(Session):
 
     def solve_cf_challenge(self, resp, **original_kwargs):
         #Memorise the first url
+        if self.baseUrl == "":
+            self.baseUrl = resp.url
         self.cf_tries += 1
         body = resp.text
         parsed_url = urlparse(resp.url)
