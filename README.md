@@ -175,3 +175,4 @@ cookie_arg, user_agent = CloudflareScraper.get_cookie_string(url)
 cmd = "curl --cookie {cookie_arg} -A {user_agent} {url}"
 print(subprocess.check_output(cmd.format(cookie_arg=cookie_arg, user_agent=user_agent, url=url), shell=True))
 ```
+ 
